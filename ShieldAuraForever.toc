@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: Shield Aura Forever
+## Notes: Secret-safe absorb HUD for WoW Forever. Shows player absorbs as a curved segmented shield aura with remaining amount.
+## Author: Jason_Ecks
+## Version: 1.0.1
+## SavedVariables: ShieldAuraForeverDB
+## X-GameType: Forever
+## IconTexture: Interface\AddOns\ShieldAuraForever\Media\shieldaura_icon.tga
+## AddonCompartmentFunc: ShieldAuraForever_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: ShieldAuraForever_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: ShieldAuraForever_OnCompartmentLeave
+
+ShieldAuraForever.lua
