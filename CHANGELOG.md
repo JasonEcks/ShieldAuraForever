@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 (November 3, 2026 — visual customization update)
+- Added horizontal and solid single-bar styles alongside the original curved segmented HUD.
+- Added a class-labeled color preset dropdown. New installations default to the player's class color; **existing settings migrate to Original Gold**, preserving the v1.0.1 appearance.
+- Kept the original gold textures byte-for-byte and added separate neutral tintable textures for colored and solid variants.
+- Curved and horizontal HUDs remember **separate dragged positions**; horizontal starts centered below the player until moved.
+- Horizontal mode disables only the shield-loss ghost animation; returning to curved mode restores the user's saved animation choice.
+- Reused the existing native single StatusBar and unchanged absorb-tracking/combat-calibration logic. No aura inspection or Mana Shield estimation added.
+- Added `/saf layout`, `/saf style`, `/saf color` commands and a compact in-window help pointer to make room for the visual settings.
+
 ## 1.0.1
 - Fixed CurseForge/Blizzard addon packaging compatibility by adding the required base `ShieldAuraForever.toc` file matching the addon folder name.
 - Retained `ShieldAuraForever_Camelot.toc` for WoW Forever-specific loading with Interface 16001.

@@ -1,13 +1,42 @@
--- Shield Aura Forever v1.0.1
+-- Shield Aura Forever v1.1.0
 -- Clean-room WoW Forever addon. No WeakAuras or nanShield code/assets are reused.
 -- Designed around Forever's secret-value restrictions: raw absorb values are only
 -- passed into Blizzard-native display APIs, never used in combat arithmetic.
 
 local ADDON_NAME = ...
-local ADDON_VERSION = "1.0.1"
+local ADDON_VERSION = "1.1.0"
 local AURA_TEXTURE = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura.tga"
 local AURA_TEXTURE_MIRRORED = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura_mirrored.tga"
+local CURVE_NEUTRAL = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura_neutral.tga"
+local CURVE_MIRRORED_NEUTRAL = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura_mirrored_neutral.tga"
+local CURVE_SOLID = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura_solid_neutral.tga"
+local CURVE_MIRRORED_SOLID = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_aura_mirrored_solid_neutral.tga"
+local HORIZONTAL_SEGMENTS = "Interface\\AddOns\\ShieldAuraForever\\Media\\shield_horizontal_segments_neutral.tga"
+local HORIZONTAL_SOLID = "Interface\\Buttons\\WHITE8X8"
 local ICON_TEXTURE = "Interface\\AddOns\\ShieldAuraForever\\Media\\shieldaura_icon.tga"
+
+-- Color choices remain class-labeled for accessibility. Gold preserves the exact
+-- original segmented-curve artwork on upgraded installations.
+local colorOptions = {
+    { value = "auto", label = "Automatic - My Class" },
+    { value = "gold", label = "Original - Gold" },
+    { value = "WARRIOR", label = "Warrior - Brown" },
+    { value = "PALADIN", label = "Paladin - Pink" },
+    { value = "HUNTER", label = "Hunter - Green" },
+    { value = "ROGUE", label = "Rogue - Yellow" },
+    { value = "PRIEST", label = "Priest - White" },
+    { value = "SHAMAN", label = "Shaman - Blue" },
+    { value = "MAGE", label = "Mage - Light Blue" },
+    { value = "WARLOCK", label = "Warlock - Purple" },
+    { value = "DRUID", label = "Druid - Orange" },
+}
+local classColorFallback = {
+    WARRIOR = {0.78, 0.61, 0.43}, PALADIN = {0.96, 0.55, 0.73},
+    HUNTER = {0.67, 0.83, 0.45}, ROGUE = {1, 0.96, 0.41},
+    PRIEST = {1, 1, 1}, SHAMAN = {0, 0.44, 0.87},
+    MAGE = {0.25, 0.78, 0.92}, WARLOCK = {0.53, 0.53, 0.93},
+    DRUID = {1, 0.49, 0.04},
+}
 
 local defaults = {
     x = 95,
@@ -22,9 +51,14 @@ local defaults = {
     minimapRadius = 105, -- pixels from minimap center; aligned with the surrounding Forever minimap buttons
     animateLoss = true,
     mirrorCurve = false, -- false = bow right; true = mirrored for a left-side HUD
+    layout = "curved", -- "curved" or "horizontal"; both use a single live status bar
+    barStyle = "segmented", -- "segmented" or "solid"
+    colorMode = "auto", -- new installs follow class; upgrades retain original gold
+    horizontalX = 0, -- separate movable position, centered beneath the character
+    horizontalY = -105,
     windowX = -420,
     windowY = 80,
-    schemaVersion = 9,
+    schemaVersion = 10,
 }
 
 local db
@@ -122,6 +156,15 @@ local function CopyDefaults()
         ShieldAuraForeverDB.schemaVersion = 9
     end
 
+    -- v1.1 introduces visual-only layouts and colors. Existing users retain
+    -- their exact original gold appearance and their curved HUD position.
+    if (ShieldAuraForeverDB.schemaVersion or 1) < 10 then
+        if hadOldSettings and ShieldAuraForeverDB.colorMode == nil then
+            ShieldAuraForeverDB.colorMode = "gold"
+        end
+        ShieldAuraForeverDB.schemaVersion = 10
+    end
+
     ShieldAuraForeverDB.maxAbsorbs = ShieldAuraForeverDB.maxAbsorbs or {}
 
     for k, v in pairs(defaults) do
@@ -156,6 +199,39 @@ local BASE_HUD_H = 158
 local BASE_BAR_W = 34
 local BASE_BAR_H = 132
 local BASE_FONT_SIZE = 13
+local HORIZONTAL_HUD_W = 184
+local HORIZONTAL_HUD_H = 56
+local HORIZONTAL_BAR_W = 160
+local HORIZONTAL_BAR_H = 16
+
+local function ResolveShieldColor()
+    local mode = db and db.colorMode or "gold"
+    if mode == "gold" then return 1, 0.90, 0.20, true end
+    if mode == "auto" then
+        local _, playerClass = UnitClass("player")
+        mode = playerClass or "PRIEST"
+    end
+    local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[mode]
+    if color then return color.r, color.g, color.b, false end
+    local fallback = classColorFallback[mode] or classColorFallback.PRIEST
+    return fallback[1], fallback[2], fallback[3], false
+end
+
+local function GetBarTexture()
+    local curved = db.layout ~= "horizontal"
+    local solid = db.barStyle == "solid"
+    local mirrored = db.mirrorCurve == true
+    if not curved then
+        return solid and HORIZONTAL_SOLID or HORIZONTAL_SEGMENTS, false
+    end
+    if solid then
+        return mirrored and CURVE_MIRRORED_SOLID or CURVE_SOLID, false
+    end
+    if db.colorMode == "gold" then
+        return mirrored and AURA_TEXTURE_MIRRORED or AURA_TEXTURE, true
+    end
+    return mirrored and CURVE_MIRRORED_NEUTRAL or CURVE_NEUTRAL, false
+end
 
 local hud = CreateFrame("Frame", "ShieldAuraForeverHUD", UIParent, "BackdropTemplate")
 hud:SetSize(BASE_HUD_W, BASE_HUD_H)
@@ -224,24 +300,44 @@ unlockLabel:SetPoint("BOTTOM", hud, "TOP", 0, 3)
 unlockLabel:SetText("Shield Aura Forever — drag to move")
 unlockLabel:Hide()
 
+-- Cosmetic-only renderer: never interprets or calculates protected absorb values.
 local function ApplyLayout()
     if not db then return end
 
     local scale = db.scale or 1
-    local auraTexture = db.mirrorCurve and AURA_TEXTURE_MIRRORED or AURA_TEXTURE
-    ghostBar:SetStatusBarTexture(auraTexture)
-    bar:SetStatusBarTexture(auraTexture)
+    local horizontal = db.layout == "horizontal"
+    local texture, originalGold = GetBarTexture()
+    local r, g, b = ResolveShieldColor()
 
-    -- Resize geometry rather than calling Frame:SetScale(). This keeps drag
-    -- coordinates stable and avoids the old snap-to-corner problem.
+    if ghostAnim:IsPlaying() then ghostAnim:Stop() end
+    ghostBar:Hide()
+    ghostBar:SetStatusBarTexture(texture)
+    bar:SetStatusBarTexture(texture)
+    if originalGold then
+        -- Original gold assets and tint remain unchanged for upgraded users.
+        bar:SetStatusBarColor(1, 1, 1, 1)
+        ghostBar:SetStatusBarColor(1, 0.82, 0.16, 0.72)
+    else
+        bar:SetStatusBarColor(r, g, b, 1)
+        ghostBar:SetStatusBarColor(r, g, b, 0.72)
+    end
+    valueText:SetTextColor(r, g, b, 1)
+
+    -- Resize geometry, not Frame:SetScale(), preserving accurate drag offsets.
     hud:SetScale(1)
-    hud:SetSize(BASE_HUD_W * scale, BASE_HUD_H * scale)
-    ghostBar:SetSize(BASE_BAR_W * scale, BASE_BAR_H * scale)
-    ghostBar:ClearAllPoints()
-    ghostBar:SetPoint("TOP", hud, "TOP", 0, -4 * scale)
-    bar:SetSize(BASE_BAR_W * scale, BASE_BAR_H * scale)
-    bar:ClearAllPoints()
-    bar:SetPoint("TOP", hud, "TOP", 0, -4 * scale)
+    local hudW = horizontal and HORIZONTAL_HUD_W or BASE_HUD_W
+    local hudH = horizontal and HORIZONTAL_HUD_H or BASE_HUD_H
+    local barW = horizontal and HORIZONTAL_BAR_W or BASE_BAR_W
+    local barH = horizontal and HORIZONTAL_BAR_H or BASE_BAR_H
+    local barTop = horizontal and -9 or -4
+    hud:SetSize(hudW * scale, hudH * scale)
+    for _, status in ipairs({ ghostBar, bar }) do
+        status:SetSize(barW * scale, barH * scale)
+        status:ClearAllPoints()
+        status:SetPoint("TOP", hud, "TOP", 0, barTop * scale)
+        status:SetOrientation(horizontal and "HORIZONTAL" or "VERTICAL")
+        status:SetReverseFill(db.reverseFill == true)
+    end
 
     valueText:ClearAllPoints()
     if db.textPosition == "top" then
@@ -252,16 +348,13 @@ local function ApplyLayout()
     valueText:SetFont(STANDARD_TEXT_FONT, math.max(8, BASE_FONT_SIZE * scale), "OUTLINE")
 
     hud:ClearAllPoints()
-    hud:SetPoint("CENTER", UIParent, "CENTER", db.x or defaults.x, db.y or defaults.y)
-    ghostBar:SetReverseFill(db.reverseFill == true)
-    bar:SetReverseFill(db.reverseFill == true)
-
-    if db.showText == false then
-        valueText:Hide()
+    if horizontal then
+        hud:SetPoint("CENTER", UIParent, "CENTER", db.horizontalX or defaults.horizontalX, db.horizontalY or defaults.horizontalY)
     else
-        valueText:Show()
+        hud:SetPoint("CENTER", UIParent, "CENTER", db.x or defaults.x, db.y or defaults.y)
     end
 
+    if db.showText == false then valueText:Hide() else valueText:Show() end
     hud:EnableMouse(not db.locked)
     if db.locked then
         unlockBG:Hide()
@@ -276,8 +369,13 @@ local function SaveHUDPosition()
     local hx, hy = hud:GetCenter()
     local ux, uy = UIParent:GetCenter()
     if hx and hy and ux and uy then
-        db.x = hx - ux
-        db.y = hy - uy
+        if db.layout == "horizontal" then
+            db.horizontalX = hx - ux
+            db.horizontalY = hy - uy
+        else
+            db.x = hx - ux
+            db.y = hy - uy
+        end
     end
 end
 
@@ -302,7 +400,7 @@ local function SetBarMaximum(maxValue)
 end
 
 local function StartLossAnimation(previousValue)
-    if not db or db.animateLoss == false or previousValue == nil then return end
+    if not db or db.layout == "horizontal" or db.animateLoss == false or previousValue == nil then return end
     if ghostAnim:IsPlaying() then ghostAnim:Stop() end
     if runtimeMax ~= nil then ghostBar:SetMinMaxValues(0, runtimeMax) end
     ghostBar:SetValue(previousValue)
@@ -465,6 +563,11 @@ local function ResetHUDLayout(preserveCalibration)
     local savedMax = preserveCalibration and GetSavedMaximum() or nil
     db.x = defaults.x
     db.y = defaults.y
+    db.horizontalX = defaults.horizontalX
+    db.horizontalY = defaults.horizontalY
+    db.layout = defaults.layout
+    db.barStyle = defaults.barStyle
+    db.colorMode = defaults.colorMode
     db.scale = defaults.scale
     db.locked = defaults.locked
     db.showText = defaults.showText
@@ -676,7 +779,35 @@ local function RefreshControlWindow()
     if c.textCheck then c.textCheck:SetChecked(db.showText ~= false) end
     if c.textPositionCheck then c.textPositionCheck:SetChecked(db.textPosition == "top") end
     if c.directionCheck then c.directionCheck:SetChecked(db.reverseFill ~= true) end
-    if c.mirrorCheck then c.mirrorCheck:SetChecked(db.mirrorCurve == true) end
+    if c.mirrorCheck then
+        c.mirrorCheck:SetChecked(db.mirrorCurve == true)
+        if db.layout == "horizontal" then c.mirrorCheck:Disable() else c.mirrorCheck:Enable() end
+    end
+    if c.colorDropDown and c.colorDropDown._safColorMode ~= db.colorMode then
+        c.colorDropDown._safColorMode = db.colorMode
+        -- External slash/reset changes require refreshing the selection text.
+        -- Selection clicks are refreshed automatically by Blizzard's menu.
+        if not c.colorDropDown:IsMenuOpen() then c.colorDropDown:GenerateMenu() end
+    end
+    if c.colorFallbackButton then
+        for _, option in ipairs(colorOptions) do
+            if option.value == db.colorMode then
+                c.colorFallbackButton:SetText(option.label)
+                break
+            end
+        end
+    end
+    if c.layoutCheck then c.layoutCheck:SetChecked(db.layout == "horizontal") end
+    if c.solidCheck then c.solidCheck:SetChecked(db.barStyle == "solid") end
+    if c.directionCheck and c.directionCheck.Text then
+        c.directionCheck.Text:SetText(db.layout == "horizontal"
+            and "Drain from right first (off = left first)"
+            or "Drain from top first (off = bottom first)")
+    end
+    if c.animationCheck then
+        if db.layout == "horizontal" then c.animationCheck:Disable() else c.animationCheck:Enable() end
+        c.animationCheck:SetChecked(db.animateLoss ~= false)
+    end
     if c.minimapCheck then c.minimapCheck:SetChecked(db.showMinimap ~= false) end
     if c.minimapRadiusSlider and not c.minimapRadiusSlider._safUpdating then
         c.minimapRadiusSlider._safUpdating = true
@@ -835,8 +966,83 @@ local function CreateControlWindow()
     end)
     windowControls.mirrorCheck = mirrorCheck
 
+    local appearanceHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    appearanceHeader:SetPoint("TOPLEFT", mirrorCheck, "BOTTOMLEFT", 6, -8)
+    appearanceHeader:SetText("Bar appearance")
+
+    local layoutCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    layoutCheck:SetPoint("TOPLEFT", appearanceHeader, "BOTTOMLEFT", -6, -3)
+    layoutCheck.Text:SetText("Horizontal bar (movable)")
+    layoutCheck:SetScript("OnClick", function(self)
+        db.layout = self:GetChecked() and "horizontal" or "curved"
+        ApplyLayout()
+        RefreshAllUI()
+    end)
+    windowControls.layoutCheck = layoutCheck
+
+    local solidCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    solidCheck:SetPoint("TOPLEFT", layoutCheck, "BOTTOMLEFT", 0, -2)
+    solidCheck.Text:SetText("Solid bar (off = segmented)")
+    solidCheck:SetScript("OnClick", function(self)
+        db.barStyle = self:GetChecked() and "solid" or "segmented"
+        ApplyLayout()
+        RefreshAllUI()
+    end)
+    windowControls.solidCheck = solidCheck
+
+    local colorLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    colorLabel:SetPoint("TOPLEFT", appearanceHeader, "TOPLEFT", 234, 0)
+    colorLabel:SetText("Shield color")
+
+    -- Forever ships the modern Blizzard DropdownButton menu templates.
+    -- Selecting a class is only a color preset, NOT shield-type detection.
+    local pendingDropDown
+    local dropdownOK, colorDropDown = pcall(function()
+        local dropdown = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
+        pendingDropDown = dropdown
+        dropdown:SetPoint("TOPLEFT", colorLabel, "BOTTOMLEFT", 0, -6)
+        dropdown:SetSize(203, 28)
+        dropdown:SetDefaultText("Automatic - My Class")
+        dropdown:SetupMenu(function(_, rootDescription)
+            for _, option in ipairs(colorOptions) do
+                rootDescription:CreateRadio(option.label,
+                    function(value) return db.colorMode == value end,
+                    function(value)
+                        db.colorMode = value
+                        ApplyLayout()
+                        RefreshAllUI()
+                    end,
+                    option.value)
+            end
+        end)
+        return dropdown
+    end)
+    if dropdownOK and colorDropDown then
+        windowControls.colorDropDown = colorDropDown
+    else
+        if pendingDropDown then pendingDropDown:Hide() end
+        -- Don't break the HUD if a future Forever build changes menu templates.
+        -- An ordinary button cycles the same presets until dropdown support is restored.
+        local fallback = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        fallback:SetPoint("TOPLEFT", colorLabel, "BOTTOMLEFT", 0, -6)
+        fallback:SetSize(203, 26)
+        fallback:SetScript("OnClick", function()
+            local nextChoice = 1
+            for i, option in ipairs(colorOptions) do
+                if option.value == db.colorMode then
+                    nextChoice = i % #colorOptions + 1
+                    break
+                end
+            end
+            db.colorMode = colorOptions[nextChoice].value
+            ApplyLayout()
+            RefreshAllUI()
+        end)
+        windowControls.colorFallbackButton = fallback
+    end
+
     local minimapCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    minimapCheck:SetPoint("TOPLEFT", mirrorCheck, "BOTTOMLEFT", 0, -2)
+    minimapCheck:SetPoint("TOPLEFT", solidCheck, "BOTTOMLEFT", 0, -2)
     minimapCheck.Text:SetText("Show minimap button")
     minimapCheck:SetScript("OnClick", function(self)
         SetMinimapVisible(self:GetChecked() and true or false, true)
@@ -901,26 +1107,9 @@ local function CreateControlWindow()
         Print("HUD layout reset; shield calibration and minimap settings preserved.")
     end)
 
-    local commandsHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    commandsHeader:SetPoint("TOPLEFT", testButton, "BOTTOMLEFT", 0, -23)
-    commandsHeader:SetText("Commands")
-
-    local commands = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    commands:SetPoint("TOPLEFT", commandsHeader, "BOTTOMLEFT", 0, -7)
-    commands:SetPoint("RIGHT", frame, "RIGHT", -24, 0)
-    commands:SetJustifyH("LEFT")
-    commands:SetJustifyV("TOP")
-    commands:SetWordWrap(true)
-    commands:SetText(
-        "|cffffd35a/saf options|r — open/close this window     " ..
-        "|cffffd35a/saf blizzard|r — Blizzard AddOns page\n" ..
-        "|cffffd35a/saf unlock|r / |cffffd35a/saf lock|r — move/lock HUD     " ..
-        "|cffffd35a/saf scale N|r — 0.5 to 2.5\n" ..
-        "|cffffd35a/saf text on|off|r     |cffffd35a/saf textpos top|bottom|r\n" ..
-        "|cffffd35a/saf flip|r     |cffffd35a/saf mirror|r\n" ..
-        "|cffffd35a/saf minimap on|off|r     |cffffd35a/saf radius N|r\n" ..
-        "|cffffd35a/saf animation on|off|r (follows drain)     |cffffd35a/saf calibrate|r     |cffffd35a/saf test|r     |cffffd35a/saf reset|r"
-    )
+    local commandsHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    commandsHint:SetPoint("TOPLEFT", testButton, "BOTTOMLEFT", 0, -14)
+    commandsHint:SetText("|cffffd35a/saf help|r lists every command. Horizontal mode temporarily disables loss animation.")
 
     local note = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 22, 20)
@@ -1173,7 +1362,10 @@ local function ShowHelp()
     Print("/saf text on|off")
     Print("/saf textpos top|bottom - place the absorb number above or below the aura")
     Print("/saf flip     - reverse which end of the shield aura drains")
-    Print("/saf mirror [on|off] - mirror the aura curve for a left-side HUD")
+    Print("/saf mirror [on|off] - mirror the curved HUD")
+    Print("/saf layout curved|horizontal - select HUD layout")
+    Print("/saf style segmented|solid - select bar style")
+    Print("/saf color auto|gold|warrior|paladin|hunter|rogue|priest|shaman|mage|warlock|druid")
     Print("/saf minimap on|off")
     Print("/saf radius N  - minimap button distance (55 to 200 pixels)")
     Print("/saf animation on|off - toggle shield-loss animation (follows drain direction)")
@@ -1255,6 +1447,39 @@ SlashCmdList.SHIELDAURAFOREVER = function(msg)
         ApplyLayout()
         RefreshAllUI()
         Print(db.mirrorCurve and "aura curve mirrored to the left." or "aura curve bows to the right.")
+    elseif cmd == "layout" then
+        if arg ~= "curved" and arg ~= "horizontal" then
+            Print("use /saf layout curved or /saf layout horizontal")
+            return
+        end
+        db.layout = arg
+        ApplyLayout()
+        RefreshAllUI()
+        Print("HUD layout set to " .. arg .. ". Each layout remembers its own dragged position.")
+    elseif cmd == "style" then
+        if arg ~= "segmented" and arg ~= "solid" then
+            Print("use /saf style segmented or /saf style solid")
+            return
+        end
+        db.barStyle = arg
+        ApplyLayout()
+        RefreshAllUI()
+        Print("HUD bar style set to " .. arg .. ".")
+    elseif cmd == "color" then
+        local selected = arg:upper()
+        if arg == "auto" or arg == "gold" then selected = arg end
+        local valid = false
+        for _, option in ipairs(colorOptions) do
+            if option.value == selected then valid = true; break end
+        end
+        if not valid then
+            Print("invalid color. Use /saf help for color preset names.")
+            return
+        end
+        db.colorMode = selected
+        ApplyLayout()
+        RefreshAllUI()
+        Print("HUD color set to " .. arg .. ".")
     elseif cmd == "minimap" then
         if arg == "on" then
             SetMinimapVisible(true, false)
