@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 (November 7, 2026 — accessibility and settings update)
+- Rebuilt the movable settings window with a compact, searchable sidebar. Search results expose matching settings directly, and a clickable X clears search.
+- Added optional independent positioning for the exact absorb-number text, plus font-size controls. Existing attached above/below positions remain available.
+- Added slider **and** exact numeric entry for ranged settings, including HUD scale, horizontal width/height, font size, opacity, and minimap-button distance.
+- Fixed the Blizzard AddOns minimap-distance field to display its saved value immediately while remaining editable (Enter to apply, Escape to cancel).
+- Added adjustable horizontal-bar width and height while preserving proportional scaling for curved bars.
+- Added **HUD opacity**, defaulting to 100% and applied to the bar and number together. Optional independent number opacity is available for improved legibility.
+- Added optional combat-only HUD visibility, with unlock and test-preview overrides for editing.
+- Added custom RGB/HEX colors and a native color picker while preserving automatic class colors, named presets, and Original Gold.
+- Preserved existing settings, calibration, curved/horizontal positions, and original absorb-tracking logic through upgrades.
+- Weakened Soul detection/glow is **not included** in this release; investigation continues separately.
+
 ## 1.1.0 (November 3, 2026 — visual customization update)
 - Added horizontal and solid single-bar styles alongside the original curved segmented HUD.
 - Added a class-labeled color preset dropdown. New installations default to the player's class color; **existing settings migrate to Original Gold**, preserving the v1.0.1 appearance.

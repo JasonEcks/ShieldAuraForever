@@ -1,8 +1,22 @@
-# Shield Aura Forever v1.1.0
+# Shield Aura Forever v1.2.0
 
 A lightweight absorb HUD for **World of Warcraft: Forever**. Shield Aura Forever displays the player's remaining damage absorb as a single movable HUD near the character, with an optional numeric absorb value. Choose a curved or horizontal layout, segmented or solid styling, and class-labeled color presets.
 
 Shield Aura Forever is a clean-room addon inspired by the general segmented shield-HUD concept. It does **not** include or reuse nanShield / WeakAuras source code or artwork.
+
+**This release focuses on usability and accessibility.** Weakened Soul detection and related glow indicators are not included in v1.2.0.
+
+## New in v1.2.0
+
+- Searchable settings window with a sidebar; search directly reveals usable settings from all sections.
+- Independently draggable absorb number, with its own saved screen location and adjustable font size.
+- Consistent **slider + exact numeric entry** for every ranged scalar setting: HUD scale (0.50–2.50), horizontal width (60–500 px), horizontal height (6–64 px), number font size (8–40 px), opacity (0–100%), and minimap distance (55–200 px).
+- **Compact settings rows** with more options visible without scrolling; unchanged font size.
+- **Unified HUD opacity** (100% by default) applies to both bar and absorb number. Uncheck **Match number to HUD opacity** in Visibility & Effects to reveal independent number opacity (0–100%). Previously saved separate bar/number opacity settings are preserved.
+- Optional combat-only visibility, with unlock and preview overrides for editing.
+- Custom RGB/HEX entry and WoW's native color picker, alongside the existing automatic class colors, presets and original gold.
+- Legacy v1.1.0 configuration migration: old positions, curves, bar presets, original gold and calibration are preserved.
+- Curved dimensions remain proportional. Horizontal width and height can be specified independently.
 
 ## Features
 
@@ -50,38 +64,42 @@ The addon displays the player's **total current absorb**, so simultaneous absorb
 
 ## Settings
 
-Open the movable settings window with `/saf`, `/saf options`, the minimap button, or the AddOn Compartment.
+Open the **searchable sidebar** settings window with `/saf`, `/saf options`, the minimap button, or the AddOn Compartment. Choose a page on the left or type a keyword such as `opacity`, `height`, `number`, `move`, or `display` to reveal matching controls across pages. Search results are editable directly. Only implemented settings appear in search results.
 
-Available controls include:
+Available controls include (grouped into Shield Bar, Absorb Number, Colors, Visibility & Effects and Minimap):
 
 - Lock / unlock HUD
-- HUD scale slider (0.50x–2.50x)
+- HUD scale slider **plus precise number input** (0.50x–2.50x)
+- Horizontal bar width and height (slider + precise pixel input, independent controls)
 - Remaining absorb number toggle
-- Absorb-number position: **bottom** (default) or **top**
+- Absorb-number position: **bottom** (default) or **top** when attached; optional independent dragging when detached
+- Number font size (slider + exact number input); separate text opacity is optional in Visibility & Effects
 - Top-first drain toggle (off = bottom-first)
 - Shield-loss animation toggle for **curved** layouts; automatically disabled while horizontal is selected (the preference is retained)
 - Mirror curve to left toggle (curved layout only)
 - Horizontal bar toggle; can be positioned **above, below, or beside** the character simply by dragging while unlocked
 - Solid vs. segmented style toggle
-- Color dropdown: Automatic - My Class, Original - Gold, or one of nine labeled class-color presets
+- Color dropdown: Automatic - My Class, Original - Gold, Custom - RGB / HEX, or one of nine labeled class-color presets
+- Custom HEX and RGB numeric entry, plus a native color picker
+- Shared HUD opacity and optional independent number opacity (both in Visibility & Effects) and optional combat-only display
 - Show/hide minimap button
-- Minimap button distance slider (55–200 px)
+- Minimap button distance slider + numeric input (55–200 px), in both movable settings and Blizzard AddOns options
 - Test preview
 - Shield calibration
 - Reset HUD layout
 
-The settings window can be dragged by its title area and remembers its position. The **curved and horizontal HUD positions are saved independently**, so moving one does not move the other.
+The searchable settings window can be dragged by its title area and remembers its position. The **curved and horizontal HUD positions are saved independently**, so moving one does not move the other.
 
-**Upgrade behavior:** existing users who have v1.0.1 settings retain the historical segmented gold curve and all saved settings/position. Fresh v1.1.0 users start with the original curved segmented layout but use automatic class coloring. The original gold asset remains in the addon and can be selected by anyone. Resetting the HUD layout returns to the new-install defaults.
+**Upgrade behavior:** existing users who have v1.0.1 or v1.1.0 settings retain the historical segmented gold curve and all saved settings/position. Fresh installations start with the original curved segmented layout but use automatic class coloring. The original gold asset remains in the addon and can be selected by anyone. Resetting the HUD layout returns to the new-install defaults.
 
-The **horizontal** bar's drain direction is right-first (or left-first if flipped); the curved bar retains top-first (or bottom-first if flipped). Color presets tint the HUD based on a chosen **class color**, not based on whichever spell created the absorb. This release does not add spell-specific absorb identification or Mana Shield simulation.
+The **horizontal** bar's drain direction is right-first (or left-first if flipped); the curved bar retains top-first (or bottom-first if flipped). Color presets tint the HUD based on a chosen **class color**, not based on whichever spell created the absorb. This release does not add spell-specific absorb identification, a Weakened Soul indicator, or Mana Shield simulation.
 
 ## Minimap button
 
 - **Left-click:** toggle the movable settings window
 - **Right-click:** open Blizzard Options → AddOns → Shield Aura Forever
 - **Drag:** move the button around the minimap rim
-- **Distance slider:** move the button toward or away from the minimap center
+- **Distance slider or numeric input:** move the button toward or away from the minimap center (55–200 px)
 - Can be hidden from the settings window or with `/saf minimap off`
 
 The default radial distance is 105 px. The 55–200 px range supports compact, wide, and double-ring minimap layouts.
@@ -93,7 +111,7 @@ When absorb is consumed on the **curved** HUD, a short fade-and-drift effect pla
 - **Top-first drain:** consumed shield drifts upward.
 - **Bottom-first drain:** consumed shield drifts downward.
 
-Animation direction is intentionally linked to drain direction so the two settings cannot conflict. Horizontal mode suppresses the loss animation until it can be verified in the Forever client; switching back to curved restores the user's animation preference.
+Animation direction is intentionally linked to drain direction so the two settings cannot conflict. Horizontal mode suppresses the loss animation; switching back to curved restores the user's animation preference.
 
 ## Known WoW Forever beta limitation
 
